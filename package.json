@@ -1,0 +1,32 @@
+{
+	"name": "fable-workflow",
+	"version": "0.1.0",
+	"description": "A configurable, data-model-agnostic workflow engine for Fable: an append-only event log, state machines defined entirely in config (states, guarded multi-exit transitions, role and data gates), and materialized projections (time metrics + eligibility) so the agency questions are reads. Guards are structured condition trees over Manyfest addresses; the engine never imports a consumer's schema.",
+	"main": "source/Fable-Workflow.js",
+	"scripts": {
+		"start": "node source/Fable-Workflow.js",
+		"test": "npx mocha -u tdd --exit --timeout 5000 test/Fable-Workflow_tests.js",
+		"example": "node example/editorial-review.js",
+		"coverage": "npx nyc --reporter=lcov --reporter=text npm test"
+	},
+	"mocha": {
+		"ui": "tdd",
+		"reporter": "spec",
+		"timeout": "5000"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/fable-retold/fable-workflow.git"
+	},
+	"author": "steven velozo <steven@velozo.com>",
+	"license": "MIT",
+	"dependencies": {
+		"fable-serviceproviderbase": "^3.0.19",
+		"manyfest": "^1.0.49"
+	},
+	"devDependencies": {
+		"fable": "^3.1.75",
+		"mocha": "^10.2.0",
+		"quackage": "^1.3.0"
+	}
+}

@@ -66,6 +66,7 @@ class FableWorkflow extends libFableServiceProviderBase
 	emit(pSubjectId, pEvent, pAt) { return this._engine.emit(pSubjectId, pEvent, pAt); }
 	advance(pSubjectId, pToState, pActor, pAt) { return this._engine.advance(pSubjectId, pToState, pActor, pAt); }
 	reevaluate(pSubjectId, pAt) { return this._engine.reevaluate(pSubjectId, pAt); }
+	hydrate(pSubjectId, pWorkflowKey, pEvents) { return this._engine.hydrate(pSubjectId, pWorkflowKey, pEvents); }
 	getState(pSubjectId) { return this._engine.getState(pSubjectId); }
 	getTimeline(pSubjectId) { return this._engine.getTimeline(pSubjectId); }
 	getMetrics(pSubjectId) { return this._engine.getMetrics(pSubjectId); }

@@ -192,6 +192,7 @@ All methods are on the service (`fable.Workflow`) and delegate to the pure engin
 | `advance(subjectId, toState, actor, at?)` | attempt a governed move; returns `{ ok, reason?, state? }` |
 | `emit(subjectId, event, at?)` | append an event (`actor.start` / `actor.stop` / a note / a prompt / anything) |
 | `reevaluate(subjectId, at?)` | re-fold eligibility after the subject's data changes |
+| `hydrate(subjectId, workflowKey, events)` | rebuild a subject's state and projections by replaying a stored event log (for a server that persists the log instead of holding the engine in memory) |
 | `getState(subjectId)` | current states and closed flag |
 | `getTimeline(subjectId)` | the full event log |
 | `getMetrics(subjectId)` | the metrics rollup |

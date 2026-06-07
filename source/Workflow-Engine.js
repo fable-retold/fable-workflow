@@ -167,6 +167,45 @@ class WorkflowEngine
 		if (this._subjects[pSubjectId]) { this._recomputeEligibility(pSubjectId, (pAt != null) ? pAt : this._now()); }
 	}
 
+	/**
+	 * Rebuild a subject from its stored event log, for a server that persists the log
+	 * rather than holding the engine in memory. The log is the source of truth; this
+	 * replays it to reconstruct the current states and the folded projections, without
+	 * appending anything new. After replay, eligibility is recomputed against the current
+	 * data (unless the subject is closed) so the agency reads work immediately. Events are
+	 * sorted by (At, ID) so an out-of-order fetch still folds correctly.
+	 */
+	hydrate(pSubjectId, pWorkflowKey, pEvents)
+	{
+		let tmpDefinition = this._workflows[pWorkflowKey];
+		if (!tmpDefinition) { throw new Error('unknown workflow "' + pWorkflowKey + '"'); }
+		if (this._subjects[pSubjectId]) { throw new Error('subject "' + pSubjectId + '" is already open'); }
+
+		let tmpEvents = (pEvents || []).slice().sort((pA, pB) => ((pA.At - pB.At) || ((pA.ID || 0) - (pB.ID || 0))));
+		let tmpOpenedAt = tmpEvents.length ? tmpEvents[0].At : this._now();
+
+		this._subjects[pSubjectId] =
+		{
+			SubjectID: pSubjectId,
+			WorkflowKey: pWorkflowKey,
+			Events: [],
+			CurrentStates: [],
+			Closed: false,
+			Rollup: { OpenedAt: tmpOpenedAt, ClosedAt: null, ElapsedMS: 0, ActiveMS: 0, StalledMS: 0, EffortMS: 0, OverlapMS: 0, StateTime: {}, ActorTime: {} },
+			Eligibility: [],
+			_open: { states: {}, actors: {}, activeCount: 0, activeSince: null }
+		};
+
+		tmpEvents.forEach((pEvent) =>
+		{
+			this._replayEvent(pSubjectId, pEvent);
+			if ((pEvent.ID || 0) > this._eventSeq) { this._eventSeq = pEvent.ID; }
+		});
+
+		if (!this._subjects[pSubjectId].Closed) { this._recomputeEligibility(pSubjectId, this._now()); }
+		return this.getState(pSubjectId);
+	}
+
 	// -- internal folds --------------------------------------------------------
 
 	_append(pSubjectId, pEvent, pAt)
@@ -248,6 +287,72 @@ class WorkflowEngine
 		this._append(pSubjectId, { Type: 'closed', Actor: pActorID }, pAt);
 		tmpRecord.Eligibility = [];
 		this._clearAgency(pSubjectId);
+	}
+
+	// Apply one already-recorded event's fold, without appending a new event. This mirrors
+	// the accrual the live lifecycle methods do; hydrate() replays the log through it. A
+	// round-trip test (build live -> hydrate from the timeline) guards the two against drift.
+	_replayEvent(pSubjectId, pEvent)
+	{
+		let tmpRecord = this._subjects[pSubjectId];
+		let tmpAt = pEvent.At;
+		switch (pEvent.Type)
+		{
+			case 'state.enter':
+				tmpRecord._open.states[pEvent.State] = tmpAt;
+				if (tmpRecord.CurrentStates.indexOf(pEvent.State) < 0) { tmpRecord.CurrentStates.push(pEvent.State); }
+				break;
+			case 'state.exit':
+			{
+				let tmpSince = tmpRecord._open.states[pEvent.State];
+				if (tmpSince != null)
+				{
+					tmpRecord.Rollup.StateTime[pEvent.State] = (tmpRecord.Rollup.StateTime[pEvent.State] || 0) + (tmpAt - tmpSince);
+					delete tmpRecord._open.states[pEvent.State];
+				}
+				let tmpIndex = tmpRecord.CurrentStates.indexOf(pEvent.State);
+				if (tmpIndex >= 0) { tmpRecord.CurrentStates.splice(tmpIndex, 1); }
+				break;
+			}
+			case 'actor.start':
+				if (tmpRecord._open.actors[pEvent.Actor] == null)
+				{
+					tmpRecord._open.actors[pEvent.Actor] = tmpAt;
+					if (tmpRecord._open.activeCount === 0) { tmpRecord._open.activeSince = tmpAt; }
+					tmpRecord._open.activeCount++;
+				}
+				break;
+			case 'actor.stop':
+			{
+				let tmpSince = tmpRecord._open.actors[pEvent.Actor];
+				if (tmpSince != null)
+				{
+					let tmpDuration = tmpAt - tmpSince;
+					tmpRecord.Rollup.EffortMS += tmpDuration;
+					tmpRecord.Rollup.ActorTime[pEvent.Actor] = (tmpRecord.Rollup.ActorTime[pEvent.Actor] || 0) + tmpDuration;
+					delete tmpRecord._open.actors[pEvent.Actor];
+					tmpRecord._open.activeCount--;
+					if (tmpRecord._open.activeCount === 0 && tmpRecord._open.activeSince != null)
+					{
+						tmpRecord.Rollup.ActiveMS += (tmpAt - tmpRecord._open.activeSince);
+						tmpRecord._open.activeSince = null;
+					}
+					tmpRecord.Rollup.OverlapMS = tmpRecord.Rollup.EffortMS - tmpRecord.Rollup.ActiveMS;
+				}
+				break;
+			}
+			case 'closed':
+				tmpRecord.Closed = true;
+				tmpRecord.Rollup.ClosedAt = tmpAt;
+				tmpRecord.Rollup.ElapsedMS = tmpAt - tmpRecord.Rollup.OpenedAt;
+				tmpRecord.Rollup.StalledMS = Math.max(0, tmpRecord.Rollup.ElapsedMS - tmpRecord.Rollup.ActiveMS);
+				tmpRecord.Rollup.OverlapMS = tmpRecord.Rollup.EffortMS - tmpRecord.Rollup.ActiveMS;
+				break;
+			default:
+				// opened, exit.became-available, and any custom event carry no fold.
+				break;
+		}
+		tmpRecord.Events.push(pEvent);
 	}
 
 	_buildContext(pSubjectId)

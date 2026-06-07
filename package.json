@@ -1,6 +1,6 @@
 {
 	"name": "fable-workflow",
-	"version": "0.2.0",
+	"version": "1.0.0",
 	"description": "A configurable, data-model-agnostic workflow engine for Fable: an append-only event log, state machines defined entirely in config (states, guarded multi-exit transitions, role and data gates), and materialized projections (time metrics + eligibility) so the agency questions are reads. Guards are structured condition trees over Manyfest addresses; the engine never imports a consumer's schema.",
 	"main": "source/Fable-Workflow.js",
 	"scripts": {
